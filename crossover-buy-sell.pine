@@ -1,0 +1,37 @@
+//
+// @Ajay
+//
+// If you use this code in its original/modified form, do drop me a note. 
+//
+study(title="WaveTrend with Crosses [Mahadev_Phad]", shorttitle="AJAY_TREND_CROSSOVER")
+n1 = input(15, "Channel Length")
+n2 = input(27, "Average Length")
+obLevel1 = input(55, "Over Bought Level 1")
+obLevel2 = input(45, "Over Bought Level 2")
+osLevel1 = input(-55, "Over Sold Level 1")
+osLevel2 = input(-45, "Over Sold Level 2")
+ 
+ap = hlc3 
+esa = ema(ap, n1)
+d = ema(abs(ap - esa), n1)
+ci = (ap - esa) / (0.015 * d)
+tci = ema(ci, n2)
+ 
+wt1 = tci
+wt2 = sma(wt1,4)
+
+
+plot(0, color=lime)
+plot(obLevel1, title="S.CompraL2", color=red, linewidth = 4)
+plot(osLevel1, title="S.VendaL2", color=green, linewidth = 4)
+plot(obLevel2, title="S.CompraL1", color=red, linewidth = 2)
+plot(osLevel2, title="S.VendaL1", color=green, linewidth = 2)
+
+plot(wt1, title="Rápida", color=green, linewidth = 2, transp=0)
+plot(wt2, title="Longa", color=red, linewidth = 3, transp=0)
+plot(wt1-wt2, title="Força Alma",  color=aqua, style=area, transp=50)
+plot(cross(wt1, wt2) ? wt2 : na, title="Cruzamento1", color = red , style = cross, linewidth = 4, transp=0)
+plot(cross(wt1, wt2) ? wt2 : na, title="Cruzamento2", color = (wt2 - wt1 > 0 ? red : green) , style = cross, linewidth = 4, transp=0)
+barcolor(cross(wt1, wt2) ? (wt2 - wt1 > 0 ? yellow : blue) : na)
+
+

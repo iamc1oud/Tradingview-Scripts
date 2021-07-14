@@ -1,0 +1,8 @@
+//@version=4
+study(title="9 to futere", shorttitle="9Future", overlay=true)
+candles = input(9, minval=1, title="candles")
+future = plot(close, offset = candles, color=color.blue, title="future")
+if(low < close[9] and high > close[9] and close > close[9] and close > open)
+    label.new(bar_index, low, text="Long", style=label.style_label_up, color = color.green)
+if(low < close[9] and high > close[9] and close < close[9] and close < open)
+    label.new(bar_index, high, text="Short", style=label.style_label_down, color = color.red)
