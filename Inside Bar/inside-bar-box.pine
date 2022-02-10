@@ -1,0 +1,73 @@
+study('Inside Bar Boxes', shorttitle="IB Boxes",overlay=true)
+
+//inputs
+
+// buffer zone around high-low
+highLowBuffer = input(0, "High-Low buffer zone")
+
+// bars highlight
+barHighlight = input(true, "Highlight bars in boxes")
+// Show all or only last box
+showOnlyLastBox = input(false, "Show only last Box")
+// show breaks
+showBreak = input(true, "Show boxes break")
+
+// Box background color and transparency
+bgTransparency = input(90, "Box transparency")
+bgColor = input(color.blue, "Background color", type=input.color)
+// color for insibe bars if barHighlight is true
+insideBarsColor = input(color.orange, "Inside bars body color", type=input.color)
+
+
+
+// variables
+var box myBox = na
+
+var float boxHigh = na
+var float boxLow = na
+
+varip int barIndex = 1
+varip bool f = false
+
+// check IB
+isInsideBar(previousBar) =>
+    hp = high[previousBar]+highLowBuffer*syminfo.mintick
+    lp = low[previousBar]+highLowBuffer*syminfo.mintick
+    bodyStatus = (close >= open) ? 1 : -1
+
+    isIB = (close <= hp and close >= lp) and (open <= hp and open >= lp)
+    
+    isIB
+
+
+isIB = isInsideBar(barIndex)
+
+isBarHighlight = isIB and barHighlight
+
+barcolor(isBarHighlight ? insideBarsColor : na)
+
+if isIB and not isIB[1] and barstate.isconfirmed
+    boxHigh := high[1]
+    boxLow := low[1]
+    f := true
+
+    if showOnlyLastBox
+        box.delete(id=myBox[1])
+
+    myBox := box.new(bar_index-1, high[1], bar_index, low[1], bgcolor=color.new(bgColor, bgTransparency))
+    barIndex := barIndex+1
+
+else if isIB and isIB[1] and barstate.isconfirmed
+    box.set_right(myBox[1], bar_index)
+    barIndex := barIndex+1
+    
+else if isIB[1] and not isIB and barstate.isconfirmed
+    box.set_right(myBox[1], bar_index)
+    barIndex := 1
+    
+else if not isIB[1] and not isIB
+    f := false
+
+
+plotshape(showBreak and f and crossover(close, boxHigh), color=color.green, location=location.belowbar, style=shape.triangleup)
+plotshape(showBreak and f and crossunder(close, boxLow), color=color.red, location=location.abovebar, style=shape.triangledown)
