@@ -1,5 +1,13 @@
 //@version=4
 
+//  Thanks to dynausmaux for the code..
+//  Thanks to falconCoin for https://www.tradingview.com/script/KVfgBvDd-Market-Cipher-B-Free-version-with-Buy-and-sell/ inspired me to start this.
+//  Thanks to LazyBear for WaveTrend Oscillator https://www.tradingview.com/script/2KE8wTuF-Indicator-WaveTrend-Oscillator-WT/
+//  Thanks to RicardoSantos for https://www.tradingview.com/script/3oeDh0Yq-RS-Price-Divergence-Detector-V2/
+//  Thanks to LucemAnb for Plain Stochastic Divergence https://www.tradingview.com/script/FCUgF8ag-Plain-Stochastic-Divergence/
+//  Thanks to andreholanda73 for MFI+RSI Area https://www.tradingview.com/script/UlGZzUAr/
+//  I especially thanks to TradingView for its platform that facilitates development and learning.
+//
 //  CIRCLES & TRIANGLES:
 //    - LITTLE CIRCLE: They appear at all WaveTrend wave crossings.
 //    - GREEN CIRCLE: The wavetrend waves are at the oversold level and have crossed up (bullish).
@@ -7,7 +15,13 @@
 //    - GOLD/ORANGE CIRCLE: When RSI is below 20, WaveTrend waves are below or equal to -80 and have crossed up after good bullish divergence (DONT BUY WHEN GOLD CIRCLE APPEAR).
 //    - None of these circles are certain signs to trade. It is only information that can help you. 
 //    - PURPLE TRIANGLE: Appear when a bullish or bearish divergence is formed and WaveTrend waves crosses at overbought and oversold points.
-// 
+//
+//  NOTES:
+//    - I am not an expert trader or know how to program pine script as such, in fact it is my first indicator only to study and all the code is copied and modified from other codes that are published in TradingView.
+//    - I am very grateful to the entire TV community that publishes codes so that other newbies like me can learn and present their results. This is an attempt to imitate Market Cipher B. 
+//    - Settings by default are for 4h timeframe, divergences are more stronger and accurate. Haven't tested in all timeframes, only 2h and 4h.
+//    - If you get an interesting result in other timeframes I would be very grateful if you would comment your configuration to implement it or at least check it.
+//
 //  CONTRIBUTIONS:
 //    - Tip/Idea: Add higher timeframe analysis for bearish/bullish patterns at the current timeframe.
 //    + Bearish/Bullish FLAG:
@@ -143,6 +157,10 @@ colormacdWT2c = #132213
 colormacdWT2d = #770000
 
 // } PARAMETERS
+
+// Horizontal lines at -60 and +60.
+hline(-60, title="Horizontal Line -60", color=color.red, linewidth=1)
+hline(60, title="Horizontal Line +60", color=color.green, linewidth=1)
 
 // FUNCTIONS {
   
