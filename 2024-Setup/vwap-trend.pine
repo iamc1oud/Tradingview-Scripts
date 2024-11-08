@@ -1,0 +1,150 @@
+//@version=5
+indicator(title="Volume Weighted Average Price", shorttitle="VWAP Trend", overlay=true)
+
+hideonDWM = input(false, title="Hide VWAP on 1D or Above", group="VWAP Settings", display = display.data_window)
+var anchor = input.string(defval = "Session", title="Anchor Period",
+ options=["Session", "Week", "Month", "Quarter", "Year", "Decade", "Century", "Earnings", "Dividends", "Splits"], group="VWAP Settings")
+src = input(title = "Source", defval = hlc3, group="VWAP Settings", display = display.data_window)
+offset = input.int(0, title="Offset", group="VWAP Settings", minval=0, display = display.data_window)
+
+BANDS_GROUP = "Bands Settings"
+CALC_MODE_TOOLTIP = "Determines the units used to calculate the distance of the bands. When 'Percentage' is selected, a multiplier of 1 means 1%."
+calcModeInput = input.string("Standard Deviation", "Bands Calculation Mode", options = ["Standard Deviation", "Percentage"], group = BANDS_GROUP, tooltip = CALC_MODE_TOOLTIP, display = display.data_window)
+showBand_1 = input(true, title = "", group = BANDS_GROUP, inline = "band_1", display = display.data_window)
+bandMult_1 = input.float(1.0, title = "Bands Multiplier #1", group = BANDS_GROUP, inline = "band_1", step = 0.5, minval=0, display = display.data_window)
+showBand_2 = input(false, title = "", group = BANDS_GROUP, inline = "band_2", display = display.data_window)
+bandMult_2 = input.float(2.0, title = "Bands Multiplier #2", group = BANDS_GROUP, inline = "band_2", step = 0.5, minval=0, display = display.data_window)
+showBand_3 = input(false, title = "", group = BANDS_GROUP, inline = "band_3", display = display.data_window)
+bandMult_3 = input.float(3.0, title = "Bands Multiplier #3", group = BANDS_GROUP, inline = "band_3", step = 0.5, minval=0, display = display.data_window)
+
+if barstate.islast and ta.cum(volume) == 0
+    runtime.error("No volume is provided by the data vendor.")
+
+new_earnings = request.earnings(syminfo.tickerid, earnings.actual, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_dividends = request.dividends(syminfo.tickerid, dividends.gross, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_split = request.splits(syminfo.tickerid, splits.denominator, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+isNewPeriod = switch anchor
+	"Earnings"  => not na(new_earnings)
+	"Dividends" => not na(new_dividends)
+	"Splits"    => not na(new_split)
+	"Session"   => timeframe.change("D")
+	"Week"      => timeframe.change("W")
+	"Month"     => timeframe.change("M")
+	"Quarter"   => timeframe.change("3M")
+	"Year"      => timeframe.change("12M")
+	"Decade"    => timeframe.change("12M") and year % 10 == 0
+	"Century"   => timeframe.change("12M") and year % 100 == 0
+	=> false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(src[1]) and not isEsdAnchor
+	isNewPeriod := true
+
+float vwapValue = na
+float upperBandValue1 = na
+float lowerBandValue1 = na
+float upperBandValue2 = na
+float lowerBandValue2 = na
+float upperBandValue3 = na
+float lowerBandValue3 = na
+
+if not (hideonDWM and timeframe.isdwm)
+    [_vwap, _stdevUpper, _] = ta.vwap(src, isNewPeriod, 1)
+	vwapValue := _vwap
+    stdevAbs = _stdevUpper - _vwap
+	bandBasis = calcModeInput == "Standard Deviation" ? stdevAbs : _vwap * 0.01
+	upperBandValue1 := _vwap + bandBasis * bandMult_1
+	lowerBandValue1 := _vwap - bandBasis * bandMult_1
+	upperBandValue2 := _vwap + bandBasis * bandMult_2
+	lowerBandValue2 := _vwap - bandBasis * bandMult_2
+	upperBandValue3 := _vwap + bandBasis * bandMult_3
+	lowerBandValue3 := _vwap - bandBasis * bandMult_3
+
+plot(vwapValue, title="VWAP", color=#2962FF, offset=offset)
+
+upperBand_1 = plot(upperBandValue1, title="Upper Band #1", color=color.green, offset=offset, display = showBand_1 ? display.all : display.none)
+lowerBand_1 = plot(lowerBandValue1, title="Lower Band #1", color=color.green, offset=offset, display = showBand_1 ? display.all : display.none)
+fill(upperBand_1, lowerBand_1, title="Bands Fill #1", color= color.new(color.green, 95)    , display = showBand_1 ? display.all : display.none)
+
+upperBand_2 = plot(upperBandValue2, title="Upper Band #2", color=color.olive, offset=offset, display = showBand_2 ? display.all : display.none)
+lowerBand_2 = plot(lowerBandValue2, title="Lower Band #2", color=color.olive, offset=offset, display = showBand_2 ? display.all : display.none)
+fill(upperBand_2, lowerBand_2, title="Bands Fill #2", color= color.new(color.olive, 95)    , display = showBand_2 ? display.all : display.none)
+
+upperBand_3 = plot(upperBandValue3, title="Upper Band #3", color=color.teal, offset=offset, display = showBand_3 ? display.all : display.none)
+lowerBand_3 = plot(lowerBandValue3, title="Lower Band #3", color=color.teal, offset=offset, display = showBand_3 ? display.all : display.none)
+fill(upperBand_3, lowerBand_3, title="Bands Fill #3", color= color.new(color.teal, 95)    , display = showBand_3 ? display.all : display.none)
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 𝙐𝙎𝙀𝙍 𝙄𝙉𝙋𝙐𝙏𝙎
+// --------------------------------------------------------------------------------------------------------------------{
+int  length     = input.int(15, title="Length") // Length for the moving average calculations
+bool show_levl  = input.bool(true, "Trend Levels") // Toggle to show trend levels
+
+// Colors for the trend levels
+color up = input.color(#30d453, "+", group = "Colors", inline = "i")
+color dn = input.color(#4043f1, "-", group = "Colors", inline = "i")
+
+var box1         = box(na) // Variable to store the box
+series float atr = ta.atr(200) // Average True Range (ATR) for trend levels
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 𝙄𝙉𝘿𝙄𝘾𝘼𝙏𝙊𝙍 𝘾𝘼𝙇𝘾𝙐𝙇𝘼𝙏𝙄𝙊𝙉𝙎
+// --------------------------------------------------------------------------------------------------------------------{
+
+series float emaValue   = ta.ema(close, length) // EMA of the closing price
+series float correction = close + (close - emaValue) // Correction factor for zero-lag calculation
+series float zlma       = ta.ema(correction, length) // Zero-Lag Moving Average (ZLMA)
+
+bool  signalUp          = ta.crossover(zlma, emaValue) // Signal for bullish crossover
+bool  signalDn          = ta.crossunder(zlma, emaValue) // Signal for bearish crossunder
+
+// Determine the color of ZLMA based on its direction
+color zlma_color        = zlma > zlma[3] ? up : zlma < zlma[3] ? dn : na
+color ema_col           = emaValue < zlma ? up : dn // Determine the EMA color
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 𝙑𝙄𝙎𝙐𝘼𝙇𝙄𝙕𝘼𝙏𝙄𝙊𝙉
+// --------------------------------------------------------------------------------------------------------------------{
+
+// Plot the Zero-Lag Moving Average
+p1 = plot(zlma,     color = zlma_color, linewidth = 1) // Plot ZLMA
+p2 = plot(emaValue, color = ema_col,    linewidth = 1) // Plot EMA
+fill(p1, p2, zlma, emaValue, color.new(zlma_color, 80), color.new(ema_col, 80)) // Fill between ZLMA and EMA
+
+// Method to draw a box on the chart
+method draw_box(color col, top, bot, price)=>
+    box.new(
+             bar_index, top, bar_index, bot, col, 1, 
+             bgcolor         = color.new(col, 90), 
+             text            = str.tostring(math.round(price, 2)), 
+             text_size       = size.tiny,
+             text_color      = chart.fg_color,
+             text_halign     = text.align_right
+             )
+
+// Logic to draw trend levels as boxes on the chart
+if show_levl
+    bool check_signals = signalUp or signalDn // Check if there is an up or down signal
+
+    switch
+        // Draw a box when a bullish signal is detected
+        signalUp => box1 := up.draw_box(zlma, zlma - atr, close)
+        // Draw a box when a bearish signal is detected
+        signalDn => box1 := dn.draw_box(zlma + atr, zlma, close)
+    switch
+        // Extend the right side of the box if no new signal is detected
+        not signalUp or not signalDn => box1.set_right(bar_index + 4)  
+        => box1 := box(na) // Otherwise, reset the box
+    switch
+        // Add a downward label when price crosses below the bottom of the box
+        ta.crossunder(high, box1.get_bottom()) and not check_signals[1] and not check_signals and emaValue > zlma=>
+            label.new(bar_index - 1, high[1], "▼", color = color(na), textcolor = dn, style = label.style_label_down)
+        // Add an upward label when price crosses above the top of the box
+        ta.crossover(low, box1.get_top()) and not check_signals and not check_signals[1] and emaValue < zlma=>
+            label.new(bar_index - 1, low[1],  "▲", color = color(na), textcolor = up, style = label.style_label_up)
+
+// Plot shapes for up and down signals
+plotshape(signalUp ? zlma : na, "", shape.diamond, location.absolute, color = up, size = size.tiny)
+plotshape(signalDn ? zlma : na, "", shape.diamond, location.absolute, color = dn, size = size.tiny)
+// --------------------------------------------------------------------------------------------------------------------}
