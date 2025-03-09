@@ -1,5 +1,5 @@
 //@version=5
-indicator('Smart Money Concepts', ' Smart Money Concepts', overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500)
+indicator('SMC Swings', 'Smart Money Concepts', overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500)
 //---------------------------------------------------------------------------------------------------------------------}
 //CONSTANTS & STRINGS & INPUTS
 //---------------------------------------------------------------------------------------------------------------------{
@@ -1010,3 +1010,12 @@ if array.size(levelBoxes) >= 500
 // Plotting circle labels
 plotshape(showhighs and showBubbles and h and oitreshcond and voltreshcond and oicond ? high[swingSizeR] : na, style=shape.circle, location = location.absolute, offset = -swingSizeR, color=sellcolB, size = size.tiny)
 plotshape(showlows and showBubbles and l and oitreshcond and voltreshcond and oicond ? low[swingSizeR] : na, style=shape.circle, location = location.absolute, offset = -swingSizeR, color=buycolB, size = size.tiny)
+
+// 50% body candle
+
+candr = high-low
+bodyr = open-close
+
+borat = (bodyr*100/candr)
+
+barcolor (borat>-50 and borat <50 ? color.blue : na)
