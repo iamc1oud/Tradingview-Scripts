@@ -1,0 +1,953 @@
+//@version=5
+indicator("Fractals v2", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count = 500)
+
+// Inputs
+swingSizeR       = input.int(10, 'Bars Right-Left', inline='brl')
+swingSizeL       = input.int(15, '-', inline='brl')
+showBoxes        = input.bool(true, 'Show Boxes ', inline='aa')
+showSwingLines   = input.bool(true, 'Show Lines', inline='aa')
+showBubbles      = input.bool(true, 'Show Labels ', inline='bb')
+showVol          = input.bool(false, 'Show Volume', inline='bb')
+showOId          = input.bool(false, 'Show OI Δ   ', inline='cc')
+extendtilfilled  = input.bool(true, 'Extend Until Fill', inline='cc')
+
+// Conditions
+hidefilled       = input.bool(false, 'Hide Filled', group='Conditions')
+voltresh = input.int(0, 'Volume >', group='Conditions')
+oitresh  = input.int(0, 'OI Δ (abs.) >',  group='Conditions')
+pnoid   = input.string('/', 'Only Swings With', options = ['Positive OI Delta', 'Negative OI Delta', '/'], group='Conditions')
+// Appearance inputs
+showhighs        = input.bool(true, '', inline='sh', group='Appearance')
+showlows         = input.bool(true, '', inline='sl', group='Appearance')
+sellcol          = input.color(#aa2430, 'Lows (Line - Label - Box)', inline = 'sh', group='Appearance')
+buycol           = input.color(#66bb6a, 'Highs (Line - Label - Box)', inline='sl', group='Appearance')
+sellcolB         = input.color(#aa2430, '', inline='sh', group='Appearance')
+buycolB          = input.color(#66bb6a, '', inline = 'sl', group='Appearance')
+sellboxCol       = input.color(#80192231, '', inline = 'sh', group='Appearance')
+buyboxCol        = input.color(#66bb6a31, '', inline='sl', group='Appearance')
+lineStyle        = input.string('Dotted', 'Line Style + Width', ['Solid', 'Dashed', 'Dotted'], inline='l', group='Appearance')
+lineWid          = input.int(1, '', inline='l', group='Appearance')
+boxWid           = input.float(0.7, 'Box Width + Type ', step=0.1, inline='xx', group='Appearance')
+boxStyle         = input.string('TYPE 1', '', options=['TYPE 1', 'TYPE 2'], inline='xx', group='Appearance')
+labelsize        = input.string('Size: Tiny', 'Text Style        ', options = ['Size: Normal','Size: Large', 'Size: Small', 'Size: Tiny', 'Size: Auto' ], inline='txt', group = 'Appearance' )
+texthalign       = input.string('Right','', options = ['Middle', 'Right', 'Left'], inline='txt', group = 'Appearance')
+lookback         = input.bool(false, '', inline='lb')
+daysBack         = input.float(150, 'Lookback (D)               ',inline='lb')
+// OI Data
+binance   = input.bool(true, 'Binance USDT.P', inline = 'src',  group = 'Open Interest')
+binance2  = input.bool(true, 'Binance USD.P',  inline = 'src',  group = 'Open Interest')
+binance3  = input.bool(true, 'Binance BUSD.P', inline = 'src2', group = 'Open Interest')
+bitmex    = input.bool(true, 'BitMEX USD.P',   inline = 'src2', group = 'Open Interest')
+bitmex2   = input.bool(true, 'BitMEX USDT.P ', inline = 'src3', group = 'Open Interest')
+kraken    = input.bool(true, 'Kraken USD.P',   inline = 'src3', group = 'Open Interest')
+
+// Calculating inRange, used for lookback in days
+MSPD             = 24 * 60 * 60 * 1000
+lastBarDate      = timestamp(year(timenow), month(timenow), dayofmonth(timenow), hour(timenow), minute(timenow), second(timenow))
+thisBarDate      = timestamp(year, month, dayofmonth, hour, minute, second)
+daysLeft         = math.abs(math.floor((lastBarDate - thisBarDate) / MSPD))
+inRange          = lookback ? (daysLeft < daysBack) : true
+
+//Pivot calculations
+int prevHighIndex= na, int prevLowIndex= na, bool highActive= false, bool lowActive= false, bool h= false, bool l= false
+pivHi            = ta.pivothigh(high, swingSizeL, swingSizeR)
+pivLo            = ta.pivotlow(low, swingSizeL, swingSizeR)
+
+if not na(pivHi)
+    h := true
+    prevHighIndex := bar_index - swingSizeR
+if not na(pivLo)
+    l := true
+    prevLowIndex  := bar_index - swingSizeR
+
+// Getting OI data
+mex =  syminfo.basecurrency=='BTC' ? 'XBT' : string(syminfo.basecurrency)
+oid1 = nz(request.security('BINANCE' + ":" + string(syminfo.basecurrency) + 'USDT.P_OI',  timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+oid2 = nz(request.security('BINANCE' + ":" + string(syminfo.basecurrency) + 'USD.P_OI',   timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+oid3 = nz(request.security('BINANCE' + ":" + string(syminfo.basecurrency) + 'BUSD.P_OI',  timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+oid4 = nz(request.security('BITMEX'  + ":" + mex                          + 'USD.P_OI',   timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+oid5 = nz(request.security('BITMEX'  + ":" + mex                          + 'USDT.P_OI',  timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+oid6 = nz(request.security('KRAKEN'  + ":" + string(syminfo.basecurrency) + 'USD.P_OI',   timeframe.period,  close-close[1], ignore_invalid_symbol = true), 0)
+
+deltaOI   = (binance ? nz(oid1,0) : 0)   +   (binance2 ? nz(oid2,0)/close : 0)   +    (binance3 ? nz(oid3,0) : 0)    +   (bitmex ? nz(oid4,0)/close : 0)   +   (bitmex2 ? nz(oid5,0)/close : 0)   +   (kraken ? nz(oid6,0)/close : 0)
+
+
+
+
+//Volume, OI, box width
+vol         = volume[swingSizeR]
+
+oitreshcond = oitresh > 0 ? math.abs(deltaOI[swingSizeR])>oitresh : true
+voltreshcond = voltresh > 0 ? vol > voltresh : true
+oicond = pnoid=='Positive OI Delta' ? deltaOI[swingSizeR]>0 : pnoid=='Negative OI Delta' ? deltaOI[swingSizeR]<0 : true
+
+color CLEAR = color.rgb(0,0,0,100)
+boxWid1     = 0.001 * boxWid
+
+
+// Styles
+boxStyle(x) =>
+    switch x
+        'TYPE 1' => h ? pivHi : l ? pivLo : na
+        'TYPE 2' => h ? pivHi * (1 - boxWid1) : l ? pivLo * (1 + boxWid1) : na
+lineStyle(x) =>
+    switch x
+        'Solid'  => line.style_solid
+        'Dashed' => line.style_dashed
+        'Dotted' => line.style_dotted
+switchtextsize(textsize) =>
+    switch textsize
+        'Size: Normal'  => size.normal
+        'Size: Small'   => size.small
+        'Size: Tiny'    => size.tiny
+        'Size: Auto'    => size.auto
+        'Size: Large'   => size.large
+switchhalign(texthalign) =>
+    switch texthalign
+        'Middle'        => text.align_center
+        'Right'         => text.align_right
+        'Left'          => text.align_left
+
+//Swing level labels
+var levelBoxes = array.new_box(), var levelLines = array.new_line()
+if h and inRange and showhighs and oitreshcond and voltreshcond and oicond
+    hBox    = box.new(prevHighIndex, pivHi * (1 + boxWid1), bar_index, boxStyle(boxStyle), border_color = na, bgcolor = showBoxes ? sellboxCol : CLEAR, text= (showVol ? str.tostring(vol, format.volume) : na) +' '+ (showOId ? str.tostring(deltaOI[swingSizeR], format.volume) : ''),text_halign=switchhalign(texthalign),text_valign=text.align_center,text_color=chart.fg_color, text_size=switchtextsize(labelsize))
+    hLine   = line.new(prevHighIndex, pivHi, bar_index, pivHi, color = showSwingLines ? sellcol : CLEAR, style=lineStyle(lineStyle), width=lineWid)
+    array.push(levelBoxes, hBox)
+    array.push(levelLines, hLine)
+if l and inRange and showhighs and oitreshcond and voltreshcond and oicond
+    lBox    = box.new(prevLowIndex, pivLo * (1 - boxWid1), bar_index, boxStyle(boxStyle), border_color = na, bgcolor = showBoxes ? buyboxCol : CLEAR, text= (showVol ? str.tostring(vol, format.volume) : na) +' '+ (showOId ? str.tostring(deltaOI[swingSizeR], format.volume) : ''),text_halign=switchhalign(texthalign),text_valign=text.align_center,text_color=chart.fg_color, text_size=switchtextsize(labelsize))
+    lLine   = line.new(prevLowIndex, pivLo, bar_index, pivLo, color = showSwingLines ? buycol : CLEAR, style=lineStyle(lineStyle), width=lineWid)
+    array.push(levelBoxes, lBox)
+    array.push(levelLines, lLine)
+
+// Looping over the full array of lines and updating them, and deleting them if they have been touched
+size = array.size(levelBoxes)
+if size > 0
+    for i = 0 to size - 1
+        j = size - 1 - i
+        box = array.get(levelBoxes, j)
+        line = array.get(levelLines, j)
+        level = line.get_y2(line)
+        filled = (high >= level and low <= level)
+
+        if filled and extendtilfilled and not hidefilled
+            array.remove(levelLines, j)
+            array.remove(levelBoxes, j)
+            continue 
+
+        box.set_right(box, bar_index+1)
+        line.set_x2(line, bar_index+1)
+        if filled and hidefilled
+            array.remove(levelLines, j)
+            array.remove(levelBoxes, j)
+            line.delete(line)
+            box.delete(box)
+
+        if not filled and not extendtilfilled
+            array.remove(levelLines, j)
+            array.remove(levelBoxes, j)
+            continue 
+            box.set_right(box, bar_index[0]+4)
+            line.set_x2(line, bar_index[0]+4)
+
+
+// Deleting the oldest lines if array is too big 
+if array.size(levelBoxes) >= 500
+    int i = 0
+    while array.size(levelBoxes) >= 500
+        box = array.get(levelBoxes, i)
+        line = array.get(levelLines, i)
+        box.delete(box)
+        line.delete(line)
+        array.remove(levelBoxes, i)
+        array.remove(levelLines, i)
+        i += 1 
+        
+// Plotting circle labels
+plotshape(showhighs and showBubbles and h and oitreshcond and voltreshcond and oicond ? high[swingSizeR] : na, style=shape.circle, location = location.absolute, offset = -swingSizeR, color=sellcolB, size = size.tiny)
+plotshape(showlows and showBubbles and l and oitreshcond and voltreshcond and oicond ? low[swingSizeR] : na, style=shape.circle, location = location.absolute, offset = -swingSizeR, color=buycolB, size = size.tiny)
+
+//------------------------------------------------------------------------------
+// Settings
+//-----------------------------------------------------------------------------{
+length = input.int(5, minval = 3)
+
+//Colors
+showBull = input(true, 'Bullish Structures', inline = 'bull', group = 'Style')
+bullCss = input.color(#089981, '', inline = 'bull', group = 'Style')
+
+showBear = input(true, 'Bearish Structures', inline = 'bear', group = 'Style')
+bearCss = input.color(#f23645, '', inline = 'bear', group = 'Style')
+
+showSupport = input(false, 'Support', inline = 's', group = 'Style')
+supCss = input.color(#089981, '', inline = 's', group = 'Style')
+
+showResistance = input(false, 'Resistance', inline = 'r', group = 'Style')
+resCss = input.color(#f23645, '', inline = 'r', group = 'Style')
+
+//Dashboard
+showDash  = input(false, 'Show Dashboard', group = 'Dashboard')
+dashLoc  = input.string('Top Right', 'Location', options = ['Top Right', 'Bottom Right', 'Bottom Left'], group = 'Dashboard')
+textSize = input.string('Small', 'Size'        , options = ['Tiny', 'Small', 'Normal']                 , group = 'Dashboard')
+
+//-----------------------------------------------------------------------------}
+//Types
+//-----------------------------------------------------------------------------{
+type fractal
+    float value
+    int loc
+    bool iscrossed
+
+//-----------------------------------------------------------------------------}
+//Fractal Detection
+//-----------------------------------------------------------------------------{
+var p = int(length/2)
+n = bar_index
+
+dh = math.sum(math.sign(high - high[1]), p)
+dl = math.sum(math.sign(low - low[1]), p)
+
+bullf = dh == -p and dh[p] == p and high[p] == ta.highest(length)
+bearf = dl == p and dl[p] == -p and low[p] == ta.lowest(length)
+
+bullf_count = ta.cum(bullf ? 1 : 0)
+bearf_count = ta.cum(bearf ? 1 : 0)
+
+//-----------------------------------------------------------------------------}
+//Bullish market structure
+//-----------------------------------------------------------------------------{
+var upper = fractal.new()
+var line lower_lvl = na
+var label ms_lbl = na
+var bull_ms_count = 0
+var broken_sup = false
+var os = 0
+
+if bullf
+    upper.value := high[p]
+    upper.loc := n-p
+    upper.iscrossed := false
+
+if ta.crossover(close, upper.value) and not upper.iscrossed
+    line.new(upper.loc, upper.value, n, upper.value, color = showBull ? bullCss : na)
+
+    ms_lbl := label.new(int(math.avg(n, upper.loc)), upper.value, os == -1 ? 'ChoCH' : 'BOS'
+      , color = color(na)
+      , textcolor = showBull ? bullCss : na
+      , style = label.style_label_down
+      , size = size.tiny)
+
+    //Set support
+    k = 2
+    min = low[1]
+    for i = 2 to (n - upper.loc)-1
+        min := math.min(low[i], min)
+        k := low[i] == min ? i : k
+
+    if showSupport
+        lower_lvl := line.new(n-k, min, n, min, color = bullCss, style = line.style_dashed)
+        broken_sup := false
+
+    upper.iscrossed := true
+    bull_ms_count += 1
+    os := 1
+
+else if showSupport and not broken_sup
+    lower_lvl.set_x2(n)
+
+    if close < lower_lvl.get_y2()
+        broken_sup := true
+
+//-----------------------------------------------------------------------------}
+//Bearish market structure
+//-----------------------------------------------------------------------------{
+var lower = fractal.new()
+var line upper_lvl = na
+var broken_res = false
+var bear_ms_count = 0
+
+if bearf
+    lower.value := low[p]
+    lower.loc := n-p
+    lower.iscrossed := false
+
+if ta.crossunder(close, lower.value) and not lower.iscrossed
+    line.new(lower.loc, lower.value, n, lower.value, color = showBear ? bearCss : na)
+    
+    label.new(int(math.avg(n, lower.loc)), lower.value, os == 1 ? 'ChoCH' : 'BOS'
+      , color = color(na)
+      , textcolor = showBear ? bearCss : na
+      , style = label.style_label_up
+      , size = size.tiny)
+
+    //Set resistance
+    k = 2
+    max = high[1]
+    for i = 2 to (n - lower.loc)-1
+        max := math.max(high[i], max)
+        k := high[i] == max ? i : k
+
+    if showResistance
+        upper_lvl := line.new(n-k, max, n, max, color = bearCss, style = line.style_dashed)
+        broken_res := false
+    
+    lower.iscrossed := true
+    bear_ms_count += 1
+    os := -1
+
+else if showResistance and not broken_res
+    upper_lvl.set_x2(n)
+
+    if close > upper_lvl.get_y2()
+        broken_res := true
+
+//-----------------------------------------------------------------------------}
+//15m Opening Range (Intraday)
+//-----------------------------------------------------------------------------{
+var float openingRangeHigh = na
+var float openingRangeLow = na
+var bool isOpeningRangeSet = false
+
+if (not isOpeningRangeSet) and (time("1D") == time)
+    openingRangeHigh := high
+    openingRangeLow := low
+    isOpeningRangeSet := true
+
+// Plot the Opening Range High and Low
+plot(isOpeningRangeSet ? openingRangeHigh : na, "Opening Range High", color=color.green, linewidth=2)
+plot(isOpeningRangeSet ? openingRangeLow : na, "Opening Range Low", color=color.red, linewidth=2)
+
+//-----------------------------------------------------------------------------}
+//VWAP
+//-----------------------------------------------------------------------------{
+vwap_value = ta.vwap(close)
+
+// Plot VWAP
+plot(vwap_value, "VWAP", color=color.blue, linewidth=2)
+
+//-----------------------------------------------------------------------------}
+//Dashboard
+//-----------------------------------------------------------------------------{
+var table_position = dashLoc == 'Bottom Left' ? position.bottom_left 
+  : dashLoc == 'Top Right' ? position.top_right 
+  : position.bottom_right
+
+var table_size = textSize == 'Tiny' ? size.tiny 
+  : textSize == 'Small' ? size.small 
+  : size.normal
+
+var tb = table.new(table_position, 2, 3
+  , bgcolor = #1e222d
+  , border_color = #373a46
+  , border_width = 1
+  , frame_color = #373a46
+  , frame_width = 1)
+
+if showDash
+    if barstate.isfirst
+        tb.cell(0, 0, 'Structure To Fractal %', text_color = color.white, text_size = table_size)
+        tb.merge_cells(0,0,1,0)
+
+        tb.cell(0, 1, 'Bullish', text_color = #089981, text_size = table_size)
+        tb.cell(1, 1, 'Bearish', text_color = #f23645, text_size = table_size)
+    
+    if barstate.islast
+        tb.cell(0, 2, str.tostring(bull_ms_count / bullf_count * 100, format.percent), text_color = #089981, text_size = table_size)
+        tb.cell(1, 2, str.tostring(bear_ms_count / bearf_count * 100, format.percent), text_color = #f23645, text_size = table_size)
+
+//-----------------------------------------------------------------------------}
+//Plots
+//-----------------------------------------------------------------------------{
+plot(broken_res and not broken_res[1] ? low : na, 'Resistance Breakout', #089981, 2, plot.style_circles)
+plot(broken_sup and not broken_sup[1] ? high : na, 'Support Breakout', #f23645, 2, plot.style_circles)
+
+
+
+
+candr = high-low
+bodyr = open-close
+
+borat = (bodyr*100/candr)
+
+barcolor (borat>-50 and borat <50 ? color.white : na)
+
+//--------------------------------------------------------------------
+//#region                      Constants
+//--------------------------------------------------------------------
+
+color   COLOR_1         = color.green
+color   COLOR_2         = color.orange
+color   COLOR_3         = color.red
+color   COLOR_4         = color.purple
+color   COLOR_5         = color.blue
+int     HEAD_PADDING    = -2
+int     HEAD_TRANSP     = 60
+string  LABEL_SIZE      = size.small
+string  LABEL_STYLE     = label.style_none
+string  LINE_STYLE      = line.style_solid
+int     LINE_WIDTH      = 1
+int     OFFSET_PADDING  = 4
+string  TAIL_STYLE      = line.style_dotted
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                         Types 
+//--------------------------------------------------------------------
+
+// @type Contains the open's data.
+type Open 
+    int     barIndex
+    float   price 
+    string  name
+    bool    display
+
+
+// @enum Contains fields with configurable timeframe options as titles.
+enum Timeframes
+    s5  = "5 seconds"
+    s10 = "10 seconds"
+    s15 = "15 seconds"
+    s30 = "30 seconds"
+    m1  = "1 minute"
+    m2  = "2 minutes"
+    m3  = "3 minutes"
+    m5  = "5 minutes"
+    m10 = "10 minutes"
+    m15 = "15 minutes"
+    m30 = "30 minutes"
+    m45 = "45 minutes"
+    h1  = "1 hour"
+    h2  = "2 hours"
+    h3  = "3 hours"
+    h4  = "4 hours"
+    h6  = "6 hours"
+    h8  = "8 hours"
+    h12 = "12 hours"
+    D1  = "1 day"
+    W1  = "1 week"
+    M1  = "1 month"
+    M3  = "3 months"
+    M6  = "6 months"
+    M12 = "12 months"
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                        Inputs
+//--------------------------------------------------------------------
+
+string      group1                      = "Opens"
+string      group2                      = "Style"
+string      group3                      = "Preferences"
+
+string      rightOffsetTooltip          = "Extend the current opens to the right of the last bar."
+string      tailsTooltip                = "Extend the current opens to the left of the chart."
+string      headsTooltip                = "Extend the previous opens to the right."
+string      discoverPricesTooltip       = "On the intraday chart, discover the opens on the chart instead of requesting higher-timeframe data." +
+                                          "\n\nYou can use this setting when price discrepancies exist between the intraday and end-of-day data feeds."
+string      extendedHoursTooltip        = "If the extended trading hours are visible on the intraday chart, display the opens on the pre/post market session."
+
+bool        enableOpenInput1            = input.bool  (true,           title = "",                 group = group1, inline = "#1")
+Timeframes  openTimeframeInput1         = input.enum  (Timeframes.D1,  title = "",                 group = group1, inline = "#1", display = display.none)
+color       openColorInput1             = input.color (COLOR_1,        title = "",                 group = group1, inline = "#1")
+int         openLookbackInput1          = input.int   (1,              title = "",                 group = group1, inline = "#1", minval = 1, maxval = 500, display = display.none)
+bool        enableOpenInput2            = input.bool  (true,           title = "",                 group = group1, inline = "#2")
+Timeframes  openTimeframeInput2         = input.enum  (Timeframes.W1,  title = "",                 group = group1, inline = "#2", display = display.none)
+color       openColorInput2             = input.color (COLOR_2,        title = "",                 group = group1, inline = "#2")
+int         openLookbackInput2          = input.int   (1,              title = "",                 group = group1, inline = "#2", minval = 1, maxval = 500, display = display.none)
+bool        enableOpenInput3            = input.bool  (true,           title = "",                 group = group1, inline = "#3")
+Timeframes  openTimeframeInput3         = input.enum  (Timeframes.M1,  title = "",                 group = group1, inline = "#3", display = display.none)
+color       openColorInput3             = input.color (COLOR_3,        title = "",                 group = group1, inline = "#3")
+int         openLookbackInput3          = input.int   (1,              title = "",                 group = group1, inline = "#3", minval = 1, maxval = 500, display = display.none)
+bool        enableOpenInput4            = input.bool  (false,          title = "",                 group = group1, inline = "#4")
+Timeframes  openTimeframeInput4         = input.enum  (Timeframes.M3,  title = "",                 group = group1, inline = "#4", display = display.none)
+color       openColorInput4             = input.color (COLOR_4,        title = "",                 group = group1, inline = "#4")
+int         openLookbackInput4          = input.int   (1,              title = "",                 group = group1, inline = "#4", minval = 1, maxval = 500, display = display.none)
+bool        enableOpenInput5            = input.bool  (true,           title = "",                 group = group1, inline = "#5")
+Timeframes  openTimeframeInput5         = input.enum  (Timeframes.M12, title = "",                 group = group1, inline = "#5", display = display.none)
+color       openColorInput5             = input.color (COLOR_5,        title = "",                 group = group1, inline = "#5")
+int         openLookbackInput5          = input.int   (1,              title = "",                 group = group1, inline = "#5", minval = 1, maxval = 500, display = display.none)
+int         rightOffsetInput            = input.int   (20,             title = "Offset",           group = group2, inline = "Offset", tooltip = rightOffsetTooltip, minval = 1, display = display.none)
+bool        enableTailsInput            = input.bool  (false,          title = "Show Tails",       group = group2, tooltip = tailsTooltip)
+bool        enableHeadsInput            = input.bool  (false,          title = "Show Projections", group = group2, tooltip = headsTooltip)
+bool        discoverPricesInput         = input.bool  (false,          title = "Discover Prices",  group = group3, tooltip = discoverPricesTooltip)
+bool        enableExtendedSessionInput  = input.bool  (false,          title = "Extended Hours",   group = group3, tooltip = extendedHoursTooltip)
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                   Functions & methods
+//--------------------------------------------------------------------
+
+// @function Check if the open for the specified `timeframe` can be displayed on the chart context.
+// @returns  simple bool
+method isVisible(simple string timeframe) =>
+    timeframe.in_seconds(timeframe) > timeframe.in_seconds()
+
+
+// @function Detect changes of opens.
+// @returns  series bool
+method change(
+     simple string timeframe,
+     series int    timeframeTime,
+     simple bool   discoverPrice,
+     simple bool   discoverExtendedPrice
+     ) =>
+
+    switch 
+        discoverExtendedPrice => timeframe.change(timeframe)
+        discoverPrice         => ta.change(timeframeTime) > 0 or (barstate.isfirst and time == timeframeTime)
+        =>                       ta.change(timeframeTime) > 0 or barstate.isfirst
+
+
+// @function Request the data in the specified `timeframe` context.
+// @returns  ([int, float]) The open's time and price.
+method request(string timeframe, bool extendedSession) =>
+    string tickerId = ticker.new(syminfo.prefix, syminfo.ticker, extendedSession ? session.extended : session.regular)
+    request.security(tickerId, timeframe, [time, open], lookahead = barmerge.lookahead_on)
+
+
+// @function Check if the specified `timeframe` returns end-of-day data.
+// @returns  bool
+method higherTimeframeFeed(simple string timeframe) =>
+    timeframe.in_seconds(timeframe) >= timeframe.in_seconds("D") 
+
+
+// @function Check if the open can be sourced from the chart data.
+// @returns  bool
+discoverPrice(simple string timeframe, simple bool discovery) =>
+    discovery and higherTimeframeFeed(timeframe) and timeframe.isintraday
+
+
+// @function Check if the extended session open can be sourced from the chart.
+// @returns  bool
+discoverExtendedPrice(simple string timeframe, simple bool extendedSession) => 
+    extendedSession and higherTimeframeFeed(timeframe) and syminfo.session == session.extended
+
+
+// @function Check if the open time belongs to the previous bar.
+// @returns  bool
+adjustStartBarIndex(int t) =>
+    time_close[1] > t
+
+
+// @function Calculate the right position of the open level.
+// @returns  (int) The bar index. 
+getRightBarIndex(int padding = 0) =>
+    bar_index + rightOffsetInput + padding * OFFSET_PADDING
+
+
+// @function Produce the `timeframe` parameter from the given user input.
+// @returns  string
+method param(simple Timeframes input) =>
+    switch input
+        Timeframes.s5  => "5S"
+        Timeframes.s10 => "10S"
+        Timeframes.s15 => "15S"
+        Timeframes.s30 => "30S"
+        Timeframes.m1  => "1"
+        Timeframes.m2  => "2"
+        Timeframes.m3  => "3"
+        Timeframes.m5  => "5"
+        Timeframes.m10 => "10"
+        Timeframes.m15 => "15"
+        Timeframes.m30 => "30"
+        Timeframes.m45 => "45"
+        Timeframes.h1  => "60"
+        Timeframes.h2  => "120"
+        Timeframes.h3  => "180"
+        Timeframes.h4  => "240"
+        Timeframes.h6  => "360"
+        Timeframes.h8  => "480"
+        Timeframes.h12 => "720"
+        Timeframes.D1  => "1D"
+        Timeframes.W1  => "1W"
+        Timeframes.M1  => "1M" 
+        Timeframes.M3  => "3M"
+        Timeframes.M6  => "6M"
+        Timeframes.M12 => "12M"
+
+
+// @function Return the short display string for the specified `timeframe` string.
+// @returns  string
+method displayString(string this) =>
+    // Get the readable format.
+    string _str = switch this
+        "1"     => "m"
+        "2"     => "2m"
+        "3"     => "3m"
+        "5"     => "5m"
+        "10"    => "10m"
+        "15"    => "15m"
+        "30"    => "30m"
+        "45"    => "45m"
+        "60"    => "H"
+        "120"   => "2H"
+        "180"   => "3H"
+        "240"   => "4H"
+        "360"   => "6H"
+        "480"   => "8H"
+        "720"   => "12H"
+        "1440"  => "24H"
+        "1D"    => "D"
+        "1W"    => "W"
+        "1M"    => "M"
+        "12M"   => "Y"
+        => this
+
+    // Add spacing.
+    switch str.length(_str)
+        1 => _str + "   "
+        2 => _str + "     "
+        3 => _str + "       "
+
+
+// @function Create and update the open level. An open is composed of a label, a "body" line, and optional "tail" and "head" line extensions.
+// @returns  void
+draw(bool change, Open openData, int lookback, color color, int padding) =>
+    // @variable The reference of the last open line.
+    var line _bodyLine = na
+
+    // @variable The reference of the last open label.
+    var label _label = label.new(
+         x         = na,
+         y         = na,
+         text      = openData.name,
+         style     = LABEL_STYLE,
+         textcolor = color,
+         size      = LABEL_SIZE
+         )
+
+    // @variable The reference of the last open left extending line.
+    var line _tailLine = line.new(
+         x1     = na,
+         y1     = na,
+         x2     = na,
+         y2     = na,
+         color  = color,
+         style  = TAIL_STYLE,
+         width  = LINE_WIDTH,
+         extend = extend.left
+         )
+
+    // @variable The collection of historical open lines.
+    var array<line> _bodyLineArray  = array.new_line()
+
+    // @variable The collection of historical right extending open lines.
+    var array<line> _headLineArray  = array.new_line()
+
+
+    // Update the old open and create the new open.
+
+    if change
+        int _x2 = getRightBarIndex()
+
+        // Anchor the previous open end position.
+        _bodyLine.set_x2(openData.barIndex -1)
+
+        // Create the previous open "head".
+        if enableHeadsInput
+            _headLineArray.push(
+                 line.new(
+                     x1    = openData.barIndex -1,
+                     x2    = openData.barIndex,
+                     y1    = _bodyLine.get_y1(),
+                     y2    = _bodyLine.get_y2(),
+                     color = color.new(color, HEAD_TRANSP),
+                     style = LINE_STYLE,
+                     width = LINE_WIDTH
+                     )
+                 )
+
+            // Trim the exceeding number of drawings.
+            if _headLineArray.size() > lookback -1
+                line.delete(_headLineArray.shift())
+
+        // Update the last open label position and tooltip.
+        _label.set_xy(_x2, openData.price)
+        _label.set_tooltip(str.tostring(openData.price, format.mintick))
+
+        // Create and store the last open line.
+        _bodyLine := line.new(
+             x1    = openData.barIndex,
+             x2    = _x2,
+             y1    = openData.price,
+             y2    = openData.price,
+             color = color,
+             style = LINE_STYLE,
+             width = LINE_WIDTH
+             )
+        array.push(_bodyLineArray, _bodyLine)
+
+        // Trim the exceeding number of drawings.
+        if _bodyLineArray.size() > lookback
+            line.delete(_bodyLineArray.shift())
+
+        // Create the last open "tail".
+        if enableTailsInput
+            _tailLine.set_xy1(openData.barIndex -1, openData.price)
+            _tailLine.set_xy2(openData.barIndex,    openData.price)
+
+
+    // Update the right position of the "body" and "heads" lines.
+
+    if barstate.islast
+        if enableHeadsInput
+            int _x2 = getRightBarIndex(HEAD_PADDING)
+            for _head in _headLineArray
+                _head.set_x2(_x2)
+
+        int _x2 = getRightBarIndex(padding)
+        _bodyLine.set_x2(_x2)
+        _label.set_x(_x2)
+
+
+// @function Get the padding to apply to the open right position for not overlapping the other open labels.
+// @returns  int
+method padding(array<Open> this, int idx, float proximityThreshold) =>
+    int _padding = 0
+
+    // Open #2, #3, #4, and #5 can share the same open with #1.
+    if idx > 0 and this.get(0).display and math.abs(this.get(0).price - this.get(idx).price) <= proximityThreshold
+        _padding += 1
+
+    // Open #3, #4, and #5 can share the same open with #2.
+    if idx > 1 and this.get(1).display and math.abs(this.get(1).price - this.get(idx).price) <= proximityThreshold
+        _padding += 1
+
+    // Open #4 and #5 can share the same open with #3.
+    if idx > 2 and this.get(2).display and math.abs(this.get(2).price - this.get(idx).price) <= proximityThreshold
+        _padding += 1
+
+    // Open #5 can share the same open with #4.
+    if idx > 3 and this.get(3).display and math.abs(this.get(3).price - this.get(idx).price) <= proximityThreshold
+        _padding += 1    
+    
+    _padding
+
+
+// @function Update the open levels.
+// @returns  (bool) Is true if the open changes.
+update(
+     Open           data,
+     simple string  tf,
+     simple bool    extendedSession,
+     simple bool    discoverPrice,
+     simple bool    discoverExtendedPrice
+     ) =>
+
+    // @variable The `open` and `time` requested from the timeframe context.
+    [_tfTime, _tfOpen] = tf.request(extendedSession)
+
+    // @variable Is true when the timeframe changes.
+    bool _change = tf.change(_tfTime, discoverPrice, discoverExtendedPrice)
+
+    // @variable Is true when pinpointing the opening bar index on the previous bar.
+    bool _adjust = adjustStartBarIndex(_tfTime)
+
+    // @variable Is true when sourcing the opening price from the chart context.
+    bool _discovery = discoverPrice or discoverExtendedPrice
+
+    if _change
+        data.price    := _discovery ? open : _tfOpen
+        data.barIndex := _discovery ? bar_index : (_adjust ? bar_index -1 : bar_index)
+        
+    _change
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                 Variables declarations
+//--------------------------------------------------------------------
+
+// @variable The `timeframe` parameters produced from the enum input selections.
+var string timeframe1 = openTimeframeInput1.param()
+var string timeframe2 = openTimeframeInput2.param()
+var string timeframe3 = openTimeframeInput3.param()
+var string timeframe4 = openTimeframeInput4.param()
+var string timeframe5 = openTimeframeInput5.param()
+
+
+// @variable Are true when we can display the opens on the chart.
+var simple bool display1 = enableOpenInput1 and timeframe1.isVisible()
+var simple bool display2 = enableOpenInput2 and timeframe2.isVisible()
+var simple bool display3 = enableOpenInput3 and timeframe3.isVisible()
+var simple bool display4 = enableOpenInput4 and timeframe4.isVisible()
+var simple bool display5 = enableOpenInput5 and timeframe5.isVisible()
+
+
+// @variable Are true when sourcing the open prices from the chart instead of the requested timeframe context.
+var simple bool discoverPrice1 = discoverPrice(timeframe1, discoverPricesInput)
+var simple bool discoverPrice2 = discoverPrice(timeframe2, discoverPricesInput)
+var simple bool discoverPrice3 = discoverPrice(timeframe3, discoverPricesInput)
+var simple bool discoverPrice4 = discoverPrice(timeframe4, discoverPricesInput)
+var simple bool discoverPrice5 = discoverPrice(timeframe5, discoverPricesInput)
+
+
+// @variable Is true when we should plot the opens on the extended trading hours.
+var simple bool extendedSession = enableExtendedSessionInput and syminfo.session == session.extended
+
+
+// @variable Are true when we should source the open prices from the chart instead of the requested timeframe context.
+var simple bool discoverExtendedPrice1 = discoverExtendedPrice(timeframe1, extendedSession)
+var simple bool discoverExtendedPrice2 = discoverExtendedPrice(timeframe2, extendedSession)
+var simple bool discoverExtendedPrice3 = discoverExtendedPrice(timeframe3, extendedSession)
+var simple bool discoverExtendedPrice4 = discoverExtendedPrice(timeframe4, extendedSession)
+var simple bool discoverExtendedPrice5 = discoverExtendedPrice(timeframe5, extendedSession)
+
+
+// @variable The `Open` UDTs. 
+var Open open1 = Open.new(name = timeframe1.displayString(), display = display1)
+var Open open2 = Open.new(name = timeframe2.displayString(), display = display2)
+var Open open3 = Open.new(name = timeframe3.displayString(), display = display3)
+var Open open4 = Open.new(name = timeframe4.displayString(), display = display4)
+var Open open5 = Open.new(name = timeframe5.displayString(), display = display5)
+
+
+// @variable The collection of last `Open`. 
+var array<Open> openArray = array.from(open1, open2, open3, open4, open5)
+
+
+// @variable The maximum distance to determine if two levels overlap each other.
+float proximityPaddingThreshold = ta.atr(10) /2
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                         Logic
+//--------------------------------------------------------------------
+
+bool change1 = if display1
+    update(open1, timeframe1, extendedSession, discoverPrice1, discoverExtendedPrice1)
+
+
+bool change2 = if display2
+    update(open2, timeframe2, extendedSession, discoverPrice2, discoverExtendedPrice2)
+
+
+bool change3 = if display3
+    update(open3, timeframe3, extendedSession, discoverPrice3, discoverExtendedPrice3)
+
+
+bool change4 = if display4
+    update(open4, timeframe4, extendedSession, discoverPrice4, discoverExtendedPrice4)
+
+
+bool change5 = if display5
+    update(open5, timeframe5, extendedSession, discoverPrice5, discoverExtendedPrice5)
+
+//#endregion
+
+
+//--------------------------------------------------------------------
+//#region                        Visuals
+//--------------------------------------------------------------------
+
+//#region - Draw the open levels.
+
+if display5
+    draw(
+         change5,
+         open5,
+         openLookbackInput5,
+         openColorInput5,
+         barstate.islast ? openArray.padding(4, proximityPaddingThreshold) : 0
+         )
+
+
+if display4
+    draw(
+         change4,
+         open4,
+         openLookbackInput4,
+         openColorInput4,
+         barstate.islast ? openArray.padding(3, proximityPaddingThreshold) : 0
+         )
+
+
+if display3
+    draw(
+         change3,
+         open3,
+         openLookbackInput3,
+         openColorInput3,
+         barstate.islast ? openArray.padding(2, proximityPaddingThreshold) : 0
+         )
+
+
+if display2
+    draw(
+         change2,
+         open2,
+         openLookbackInput2,
+         openColorInput2,
+         barstate.islast ? openArray.padding(1, proximityPaddingThreshold) : 0
+         )
+
+
+if display1
+    draw(
+         change1,
+         open1,
+         openLookbackInput1,
+         openColorInput1,
+         0
+         )
+
+//#endregion
+
+
+//#region - Plot the open prices on the `status line`, `price scale`, `data window` as well for providing alert conditions.
+
+displayControls = display.status_line + display.price_scale + display.data_window
+
+plot(
+     series   = open1.price,
+     title    = "#1",
+     color    = openColorInput1,
+     editable = false,
+     display  = enableOpenInput1 ? displayControls : display.none
+     )
+
+plot(
+     series   = open2.price,
+     title    = "#2",
+     color    = openColorInput2,
+     editable = false,
+     display  = enableOpenInput2 ? displayControls : display.none
+     )
+
+plot(
+     series = open3.price,
+     title    = "#3",
+     color    = openColorInput3,
+     editable = false,
+     display  = enableOpenInput3 ? displayControls : display.none
+     )
+
+plot(
+     series   = open4.price,
+     title    = "#4",
+     color    = openColorInput4,
+     editable = false,
+     display  = enableOpenInput4 ? displayControls : display.none
+     )
+     
+plot(
+     series   = open5.price,
+     title    = "#5",
+     color    = openColorInput5,
+     editable = false,
+     display  = enableOpenInput5 ? displayControls : display.none
+     )
+
+//#endregion
+
+//#endregion-
